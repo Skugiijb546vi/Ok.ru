@@ -1,0 +1,66 @@
+name: Download_From_OK_RU_To_HuggingFace
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: 'لینکی ڤیدیۆکە (وەک ok.ru)'
+        required: true
+      file_name:
+        description: 'ناوی فایلەکە لەناو Hugging Face'
+        required: true
+        default: 'video_okru.mp4'
+
+jobs:
+  upload_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗️ Setup Tools
+        run: |
+          sudo apt-get update -qq
+          # دابەزاندنی ffmpeg زۆر گرنگە بۆ تێکەڵکردنی دەنگ و ڕەنگ ئەگەر جیا بوون
+          sudo apt-get install -y ffmpeg -qq
+          # لێرەدا yt-dlp بەکاردێنین لە جیاتی aria2
+          python -m pip install -U pip yt-dlp huggingface_hub
+
+      - name: ⬇️ Extract and Download Video
+        run: |
+          # فەرمانی yt-dlp بۆ دەرهێنان و داگرتنی باشترین کوالێتی بە فۆرماتی mp4
+          yt-dlp \
+            -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
+            --merge-output-format mp4 \
+            -o "video.mp4" \
+            "${{ github.event.inputs.video_url }}"
+
+      - name: 🚀 Upload to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python3 -c "
+          import os
+          from huggingface_hub import HfApi
+          
+          # وەرگرتنی تۆکن
+          token = os.getenv('HF_TOKEN')
+          if not token:
+              print('❌ Error: HF_TOKEN is missing in GitHub Secrets!')
+              exit(1)
+              
+          api = HfApi()
+          repo_id = 'Sarkoakram/sarko761'
+          file_name = '${{ github.event.inputs.file_name }}'
+          
+          # دڵنیابوونەوە لە بوونی فایلەکە پێش ئەپڵۆدکردن
+          if os.path.exists('video.mp4'):
+              print(f'📤 Sending to Hugging Face: {file_name}...')
+              api.upload_file(
+                  path_or_fileobj='video.mp4',
+                  path_in_repo=file_name,
+                  repo_id=repo_id,
+                  repo_type='dataset',
+                  token=token
+              )
+              print('✅ Done! Check your Hugging Face repo.')
+          else:
+              print('❌ Error: video.mp4 not found. Download failed.')
+              exit(1)
+          "
